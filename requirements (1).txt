@@ -1,0 +1,7 @@
+streamlit>=1.36
+streamlit-webrtc>=0.47
+mediapipe>=0.10
+opencv-python-headless>=4.9
+numpy>=1.24
+plotly>=5.20
+av>=11.0.0
