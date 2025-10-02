@@ -534,24 +534,38 @@ def mediapipe_frame_processor_factory(state_dict):
 
         h, w, _ = img.shape
         if res.multi_hand_landmarks:
-            hand_landmarks = res.multi_hand_landmarks[0]
-            # Convert normalized landmarks to a 3D numpy dict in a camera-centric frame
-            L = {}
-            for i, lm in enumerate(hand_landmarks.landmark):
-                # x,y in [0,1]; we re-center to [-0.5,0.5], flip y to up.
-                x = (lm.x - 0.5)
-                y = -(lm.y - 0.5)
-                z = -lm.z  # MediaPipe z is negative into the screen; flip for RHS
-                L[i] = np.array([x, y, z], dtype=float)
+            try:
+                hand_landmarks = res.multi_hand_landmarks[0]
+                # Convert normalized landmarks to a 3D numpy dict in a camera-centric frame
+                L = {}
+                for i, lm in enumerate(hand_landmarks.landmark):
+                    # x,y in [0,1]; we re-center to [-0.5,0.5], flip y to up.
+                    x = (lm.x - 0.5)
+                    y = -(lm.y - 0.5)
+                    z = -lm.z  # MediaPipe z is negative into the screen; flip for RHS
+                    L[i] = np.array([x, y, z], dtype=float)
 
-            # Apply invariance normalisation
-            L_norm = normalise_landmarks(L)
-            # Save the latest sample in the shared state
-            state_dict["latest_landmarks"] = {i: L_norm[i].tolist() for i in L_norm}
-            state_dict["latest_params"] = parametrise(L_norm)
+                # Apply invariance normalisation
+                L_norm = normalise_landmarks(L)
+                # Save the latest sample in the shared state
+                state_dict["latest_landmarks"] = {i: L_norm[i].tolist() for i in L_norm}
+                state_dict["latest_params"] = parametrise(L_norm)
+                
+                # Mark that we have valid data
+                state_dict["hand_detected"] = True
 
-            # Draw 2D overlay for feedback
-            drawing.draw_landmarks(img, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+                # Draw 2D overlay for feedback
+                drawing.draw_landmarks(img, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+                
+            except Exception as e:
+                # If there's an error in processing, clear the data
+                state_dict["latest_landmarks"] = None
+                state_dict["latest_params"] = None
+                state_dict["hand_detected"] = False
+                state_dict["error_message"] = str(e)
+        else:
+            # No hand detected, clear previous data
+            state_dict["hand_detected"] = False
 
         return av.VideoFrame.from_ndarray(img, format="bgr24")
 
@@ -680,6 +694,10 @@ def main():
         st.session_state["latest_landmarks"] = None
     if "latest_params" not in st.session_state:
         st.session_state["latest_params"] = default_params()
+    if "hand_detected" not in st.session_state:
+        st.session_state["hand_detected"] = False
+    if "error_message" not in st.session_state:
+        st.session_state["error_message"] = None
 
     tabs = st.tabs(["📹 Live Capture", "✏️ Parameter Editor", "🌑 Shadow Projection"])
 
@@ -712,17 +730,24 @@ def main():
         colA, colB = st.columns([1,1])
         with colA:
             st.markdown("#### 📊 Extracted Parameters")
-            if st.session_state.get("latest_params"):
+            if st.session_state.get("hand_detected") and st.session_state.get("latest_params"):
                 st.json(st.session_state["latest_params"])
+                if st.session_state.get("error_message"):
+                    st.error(f"⚠️ Processing error: {st.session_state['error_message']}")
             else:
                 st.warning("⚠️ No hand detected yet. Show your hand to the camera!")
+                if st.session_state.get("error_message"):
+                    st.error(f"Error: {st.session_state['error_message']}")
         
         with colB:
             st.markdown("#### 🎨 3D Visualization")
-            if st.session_state["latest_landmarks"]:
-                L = dict_to_np(st.session_state["latest_landmarks"])
-                fig3d = plot_hand_3d(L, setup, title="Normalized Captured Hand")
-                st.plotly_chart(fig3d, use_container_width=True)
+            if st.session_state.get("hand_detected") and st.session_state.get("latest_landmarks"):
+                try:
+                    L = dict_to_np(st.session_state["latest_landmarks"])
+                    fig3d = plot_hand_3d(L, setup, title="Normalized Captured Hand")
+                    st.plotly_chart(fig3d, use_container_width=True)
+                except Exception as e:
+                    st.error(f"❌ Error creating 3D visualization: {str(e)}")
             else:
                 st.info("📸 3D visualization will appear here once a hand is detected")
 
@@ -733,7 +758,7 @@ def main():
         col_btn1, col_btn2, col_btn3 = st.columns([1,2,1])
         with col_btn2:
             if st.button("🔒 Freeze to Editor", use_container_width=True):
-                if st.session_state["latest_params"]:
+                if st.session_state.get("hand_detected") and st.session_state.get("latest_params"):
                     st.session_state["frozen_params"] = st.session_state["latest_params"]
                     st.success("✅ Parameters frozen! Switch to the 'Parameter Editor' tab to modify them.")
                 else:
@@ -797,12 +822,15 @@ def main():
                 label_visibility="collapsed"
             )
         
-        if mode.startswith("📹") and st.session_state["latest_landmarks"]:
+        if mode.startswith("📹") and st.session_state.get("hand_detected") and st.session_state.get("latest_landmarks"):
             L = dict_to_np(st.session_state["latest_landmarks"])
             st.success("Using captured hand from webcam")
         else:
             L = synthesize_from_params(st.session_state.get("edited_params", default_params()))
-            st.info("Using synthesized hand from parameter editor")
+            if mode.startswith("📹"):
+                st.warning("No captured hand available, using synthesized hand instead")
+            else:
+                st.info("Using synthesized hand from parameter editor")
         
         st.markdown("---")
         
