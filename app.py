@@ -14,9 +14,96 @@ from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
 # Optional: only import mediapipe inside functions to keep app startup lean
 # import mediapipe as mp
 
-st.set_page_config(page_title="Shadow Puppet Parametrisation (MediaPipe + Streamlit)",
-                   layout="wide",
-                   page_icon="🖐️")
+st.set_page_config(
+    page_title="Shadow Puppet Parametrisation (MediaPipe + Streamlit)",
+    layout="wide",
+    page_icon="🖐️",
+    initial_sidebar_state="expanded",
+    menu_items={
+        'Get Help': 'https://github.com/alobo01/shadow-puppets-streamlit',
+        'About': "# Shadow Puppet Viewer\nInteractive hand gesture capture and parametrization using MediaPipe"
+    }
+)
+
+# --------------------- Custom Styling ---------------------
+
+def apply_custom_css():
+    """Apply custom CSS for better visual appeal"""
+    st.markdown("""
+    <style>
+    /* Main title styling */
+    h1 {
+        color: #1f77b4;
+        padding-bottom: 10px;
+        border-bottom: 3px solid #ff7f0e;
+    }
+    
+    /* Tab styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        padding: 10px 20px;
+        background-color: #f0f2f6;
+        border-radius: 5px 5px 0 0;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background-color: #1f77b4;
+        color: white;
+    }
+    
+    /* Button styling */
+    .stButton > button {
+        background-color: #ff7f0e;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        padding: 10px 24px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+    
+    .stButton > button:hover {
+        background-color: #e56d00;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+    
+    /* Info box styling */
+    .stAlert {
+        border-radius: 5px;
+        padding: 15px;
+    }
+    
+    /* Expander styling */
+    .streamlit-expanderHeader {
+        font-weight: 600;
+        font-size: 1.1em;
+        background-color: #f0f2f6;
+        border-radius: 5px;
+    }
+    
+    /* Slider styling */
+    .stSlider > div > div > div > div {
+        background-color: #1f77b4;
+    }
+    
+    /* Column borders for better separation */
+    [data-testid="column"] {
+        padding: 10px;
+        border-radius: 5px;
+    }
+    
+    /* Json display */
+    [data-testid="stJson"] {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 5px;
+        padding: 10px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
 # --------------------- Geometry helpers ---------------------
 
@@ -305,12 +392,31 @@ def plot_hand_3d(L: Dict[int,np.ndarray], setup: Setup, show_cone=True, title=""
     pts_z = [L[i][2] for i in L]
 
     fig = go.Figure()
-    fig.add_trace(go.Scatter3d(x=xs, y=ys, z=zs, mode="lines", name="skeleton"))
-    fig.add_trace(go.Scatter3d(x=pts_x, y=pts_y, z=pts_z, mode="markers", name="landmarks"))
+    fig.add_trace(go.Scatter3d(
+        x=xs, y=ys, z=zs, 
+        mode="lines", 
+        name="Hand skeleton",
+        line=dict(color="#1f77b4", width=4),
+        hoverinfo='skip'
+    ))
+    fig.add_trace(go.Scatter3d(
+        x=pts_x, y=pts_y, z=pts_z, 
+        mode="markers", 
+        name="Landmarks",
+        marker=dict(size=5, color="#ff7f0e", line=dict(color='white', width=1)),
+        hovertemplate='Point %{text}<extra></extra>',
+        text=list(L.keys())
+    ))
 
     # Torch
-    fig.add_trace(go.Scatter3d(x=[setup.T[0]], y=[setup.T[1]], z=[setup.T[2]],
-                                mode="markers+text", text=["T"], name="torch"))
+    fig.add_trace(go.Scatter3d(
+        x=[setup.T[0]], y=[setup.T[1]], z=[setup.T[2]],
+        mode="markers+text", 
+        text=["💡"], 
+        name="Torch",
+        marker=dict(size=10, color='#ffd700', symbol='diamond'),
+        textfont=dict(size=14)
+    ))
 
     # Wall circle base
     n = setup.wall_n
@@ -323,16 +429,41 @@ def plot_hand_3d(L: Dict[int,np.ndarray], setup: Setup, show_cone=True, title=""
     v = unit(np.cross(n, u))
     thetas = np.linspace(0, 2*np.pi, 120)
     circle = np.array([center + setup.base_radius*(np.cos(t)*u + np.sin(t)*v) for t in thetas])
-    fig.add_trace(go.Scatter3d(x=circle[:,0], y=circle[:,1], z=circle[:,2], mode="lines", name="wall base"))
+    fig.add_trace(go.Scatter3d(
+        x=circle[:,0], y=circle[:,1], z=circle[:,2], 
+        mode="lines", 
+        name="Wall base",
+        line=dict(color='#2ca02c', width=3),
+        hoverinfo='skip'
+    ))
 
     if show_cone:
         # draw a few generators
         for k in range(0, len(thetas), 15):
             P = circle[k]
-            fig.add_trace(go.Scatter3d(x=[setup.T[0], P[0]], y=[setup.T[1], P[1]], z=[setup.T[2], P[2]],
-                                       mode="lines", line=dict(width=1), name="generator", showlegend=False))
+            fig.add_trace(go.Scatter3d(
+                x=[setup.T[0], P[0]], y=[setup.T[1], P[1]], z=[setup.T[2], P[2]],
+                mode="lines", 
+                line=dict(width=1, color='rgba(211, 211, 211, 0.3)', dash='dash'), 
+                name="Projection ray", 
+                showlegend=(k==0),
+                hoverinfo='skip'
+            ))
 
-    fig.update_layout(title=title, scene_aspectmode="data", height=550, margin=dict(l=0,r=0,t=40,b=0))
+    fig.update_layout(
+        title=dict(text=title, font=dict(size=18, color='#1f77b4')),
+        scene=dict(
+            aspectmode="data",
+            xaxis=dict(title='X', gridcolor='lightgray', showbackground=True, backgroundcolor='rgba(240,240,240,0.3)'),
+            yaxis=dict(title='Y', gridcolor='lightgray', showbackground=True, backgroundcolor='rgba(240,240,240,0.3)'),
+            zaxis=dict(title='Z', gridcolor='lightgray', showbackground=True, backgroundcolor='rgba(240,240,240,0.3)')
+        ),
+        height=550, 
+        margin=dict(l=0,r=0,t=50,b=0),
+        paper_bgcolor='white',
+        plot_bgcolor='white',
+        legend=dict(x=0.02, y=0.98, bgcolor='rgba(255,255,255,0.8)')
+    )
     return fig
 
 def plot_projection_2d(L: Dict[int,np.ndarray], setup: Setup) -> go.Figure:
@@ -354,10 +485,32 @@ def plot_projection_2d(L: Dict[int,np.ndarray], setup: Setup) -> go.Figure:
     dotx = [pts[i][0] for i in pts]
     doty = [pts[i][1] for i in pts]
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=xs, y=ys, mode="lines", name="shadow"))
-    fig.add_trace(go.Scatter(x=dotx, y=doty, mode="markers", name="proj points"))
+    fig.add_trace(go.Scatter(
+        x=xs, y=ys, 
+        mode="lines", 
+        name="Shadow outline",
+        line=dict(color='#333333', width=3),
+        hoverinfo='skip'
+    ))
+    fig.add_trace(go.Scatter(
+        x=dotx, y=doty, 
+        mode="markers", 
+        name="Shadow points",
+        marker=dict(size=6, color='#d62728', line=dict(color='white', width=1)),
+        hovertemplate='Point %{text}<extra></extra>',
+        text=list(pts.keys())
+    ))
     fig.update_yaxes(scaleanchor="x", scaleratio=1)
-    fig.update_layout(title="Projection on wall", height=500, margin=dict(l=0,r=0,t=40,b=0))
+    fig.update_layout(
+        title=dict(text="Shadow Projection on Wall", font=dict(size=18, color='#1f77b4')),
+        height=500, 
+        margin=dict(l=0,r=0,t=50,b=0),
+        paper_bgcolor='#f5f5f5',
+        plot_bgcolor='white',
+        xaxis=dict(gridcolor='lightgray', title='Wall X'),
+        yaxis=dict(gridcolor='lightgray', title='Wall Y'),
+        legend=dict(x=0.02, y=0.98, bgcolor='rgba(255,255,255,0.8)')
+    )
     return fig
 
 # --------------------- MediaPipe Webcam ---------------------
@@ -410,28 +563,37 @@ def slider_degrees(label, value, minv=0.0, maxv=180.0, step=1.0):
     return st.slider(label, min_value=float(minv), max_value=float(maxv), value=float(value), step=float(step))
 
 def parameters_editor(params: Dict) -> Dict:
-    st.subheader("Edit Parameters")
+    st.markdown("### 🎛️ Hand Parameter Editor")
+    st.markdown("Adjust the sliders below to modify the hand pose and shape")
+    
     col1, col2 = st.columns(2)
 
     with col1:
-        phi = slider_degrees("Palm–thumb plane angle φ_thumb (deg)", params["phi_thumb"], 0.0, 120.0, 1.0)
-        i1 = slider_degrees("Inter-finger T–I (deg)", params["inter"]["T_I"], 5.0, 120.0, 1.0)
-        i2 = slider_degrees("Inter-finger I–M (deg)", params["inter"]["I_M"], 5.0, 120.0, 1.0)
-        i3 = slider_degrees("Inter-finger M–R (deg)", params["inter"]["M_R"], 5.0, 120.0, 1.0)
-        i4 = slider_degrees("Inter-finger R–P (deg)", params["inter"]["R_P"], 5.0, 120.0, 1.0)
+        st.markdown("#### 👐 Global & Inter-finger Angles")
+        phi = slider_degrees("👍 Palm–thumb plane angle φ_thumb (deg)", params["phi_thumb"], 0.0, 120.0, 1.0)
+        st.caption("Controls how far the thumb extends from the palm plane")
+        
+        st.markdown("**Spacing between fingers:**")
+        i1 = slider_degrees("👍↔️☝️ Thumb to Index", params["inter"]["T_I"], 5.0, 120.0, 1.0)
+        i2 = slider_degrees("☝️↔️🖕 Index to Middle", params["inter"]["I_M"], 5.0, 120.0, 1.0)
+        i3 = slider_degrees("🖕↔️💍 Middle to Ring", params["inter"]["M_R"], 5.0, 120.0, 1.0)
+        i4 = slider_degrees("💍↔️🤙 Ring to Pinky", params["inter"]["R_P"], 5.0, 120.0, 1.0)
 
     with col2:
-        st.markdown("**Joint angles per finger (deg)**")
-        def edit_finger(name, vals):
-            a = slider_degrees(f"{name} - joint 1", vals[0], 0.0, 180.0, 1.0)
-            b = slider_degrees(f"{name} - joint 2", vals[1], 0.0, 180.0, 1.0)
-            c = slider_degrees(f"{name} - joint 3", vals[2] if len(vals)>2 else 10.0, 0.0, 180.0, 1.0)
+        st.markdown("#### 🖐️ Individual Finger Joint Angles")
+        st.caption("Control the bend at each joint (higher = more bent)")
+        
+        def edit_finger(name, emoji, vals):
+            st.markdown(f"**{emoji} {name}:**")
+            a = slider_degrees(f"{name} MCP (base)", vals[0], 0.0, 180.0, 1.0)
+            b = slider_degrees(f"{name} PIP (middle)", vals[1], 0.0, 180.0, 1.0)
+            c = slider_degrees(f"{name} DIP (tip)", vals[2] if len(vals)>2 else 10.0, 0.0, 180.0, 1.0)
             return [a,b,c]
-        jT = edit_finger("Thumb", params["joints"]["T"] + [10.0])
-        jI = edit_finger("Index", params["joints"]["I"])
-        jM = edit_finger("Middle", params["joints"]["M"])
-        jR = edit_finger("Ring", params["joints"]["R"])
-        jP = edit_finger("Pinky", params["joints"]["P"])
+        jT = edit_finger("Thumb", "👍", params["joints"]["T"] + [10.0])
+        jI = edit_finger("Index", "☝️", params["joints"]["I"])
+        jM = edit_finger("Middle", "🖕", params["joints"]["M"])
+        jR = edit_finger("Ring", "💍", params["joints"]["R"])
+        jP = edit_finger("Pinky", "🤙", params["joints"]["P"])
 
     newp = {
         "phi_thumb": float(phi),
@@ -457,13 +619,59 @@ def dict_to_np(d):
     return {int(k): np.array(v, dtype=float) for k,v in d.items()}
 
 def main():
+    # Apply custom styling
+    apply_custom_css()
+    
+    # Sidebar with information and settings
+    with st.sidebar:
+        st.image("https://raw.githubusercontent.com/google/mediapipe/master/docs/images/mobile/hand_landmarks.png", 
+                 use_container_width=True, caption="MediaPipe Hand Landmarks")
+        
+        st.markdown("## 📚 About")
+        st.markdown("""
+        This interactive app demonstrates hand gesture capture and parametrization:
+        
+        **Features:**
+        - 🎥 Real-time webcam capture
+        - 📊 Parametric representation
+        - 🎨 3D visualization
+        - 🌑 Shadow projection
+        - ✏️ Interactive editing
+        """)
+        
+        st.markdown("---")
+        st.markdown("### 🔧 Technical Info")
+        st.info("""
+        **Invariances Applied:**
+        - Translation (palm-centered)
+        - Scale (normalized)
+        - Rotation (aligned to ±90°)
+        """)
+        
+        st.markdown("---")
+        st.markdown("### 💡 Quick Tips")
+        st.markdown("""
+        1. Allow camera access when prompted
+        2. Show your palm clearly to the camera
+        3. Freeze a pose to edit parameters
+        4. Experiment with different angles
+        5. View shadow projections in Tab 3
+        """)
+        
+        st.markdown("---")
+        st.markdown("Made with ❤️ using [Streamlit](https://streamlit.io) & [MediaPipe](https://mediapipe.dev)")
+    
+    # Main content
     st.title("🖐️ Shadow Puppet Parametrisation Viewer")
-    st.markdown(
-        "This app (1) extracts a **parametrisation** from live video via MediaPipe and normalises "
-        "it under the required **invariances** (translation, scale, in-plane rotation within ±90°), "
-        "and (2) visualises both the captured hand and a **synthetic instantiation** reconstructed "
-        "from the parameters. The torch, wall and projection cone are included."
-    )
+    st.markdown("""
+    <div style='background-color: #f0f2f6; padding: 20px; border-radius: 10px; margin-bottom: 20px;'>
+    <p style='font-size: 1.1em; margin: 0;'>
+    This app <b>captures hand gestures</b> from your webcam using MediaPipe, extracts a 
+    <b>parametric representation</b> with geometric invariances, and lets you 
+    <b>visualize and edit</b> the hand pose in 3D space with shadow projections.
+    </p>
+    </div>
+    """, unsafe_allow_html=True)
 
     setup = DEFAULT_SETUP
 
@@ -473,11 +681,22 @@ def main():
     if "latest_params" not in st.session_state:
         st.session_state["latest_params"] = default_params()
 
-    tabs = st.tabs(["Live capture", "Parameter editor & synthesis", "Projection"])
+    tabs = st.tabs(["📹 Live Capture", "✏️ Parameter Editor", "🌑 Shadow Projection"])
 
     # Tab 1: Live capture
     with tabs[0]:
-        st.write("Use the webcam to capture a hand. The overlay comes from MediaPipe; parameters update live.")
+        st.markdown("### 📹 Real-time Hand Capture")
+        st.markdown("""
+        **Instructions:**
+        1. Allow camera access when prompted
+        2. Position your hand in the camera frame
+        3. MediaPipe will detect and track 21 landmarks
+        4. View extracted parameters in real-time
+        5. Click "Freeze to Editor" to save current pose
+        """)
+        
+        st.info("💡 **Tip:** Keep your hand clearly visible with good lighting for best results!")
+        
         state_dict = st.session_state  # pass reference to callback
         rtc_config = RTCConfiguration({"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]})
         webrtc_streamer(
@@ -488,49 +707,194 @@ def main():
             video_frame_callback=mediapipe_frame_processor_factory(state_dict),
         )
 
+        st.markdown("---")
+        
         colA, colB = st.columns([1,1])
         with colA:
-            st.subheader("Latest parameters")
-            st.json(st.session_state.get("latest_params", {}))
+            st.markdown("#### 📊 Extracted Parameters")
+            if st.session_state.get("latest_params"):
+                st.json(st.session_state["latest_params"])
+            else:
+                st.warning("⚠️ No hand detected yet. Show your hand to the camera!")
+        
         with colB:
+            st.markdown("#### 🎨 3D Visualization")
             if st.session_state["latest_landmarks"]:
                 L = dict_to_np(st.session_state["latest_landmarks"])
-                fig3d = plot_hand_3d(L, setup, title="Normalised captured hand (3D)")
+                fig3d = plot_hand_3d(L, setup, title="Normalized Captured Hand")
                 st.plotly_chart(fig3d, use_container_width=True)
+            else:
+                st.info("📸 3D visualization will appear here once a hand is detected")
 
-        st.info("Click to freeze the current parameters into the editor below:")
-        if st.button("Freeze to editor"):
-            if st.session_state["latest_params"]:
-                st.session_state["frozen_params"] = st.session_state["latest_params"]
-                st.success("Parameters copied to the editor tab.")
+        st.markdown("---")
+        st.markdown("### 🔒 Freeze Current Pose")
+        st.markdown("Save the current hand parameters to edit them in the Parameter Editor tab")
+        
+        col_btn1, col_btn2, col_btn3 = st.columns([1,2,1])
+        with col_btn2:
+            if st.button("🔒 Freeze to Editor", use_container_width=True):
+                if st.session_state["latest_params"]:
+                    st.session_state["frozen_params"] = st.session_state["latest_params"]
+                    st.success("✅ Parameters frozen! Switch to the 'Parameter Editor' tab to modify them.")
+                else:
+                    st.error("❌ No parameters to freeze. Capture a hand first!")
 
     # Tab 2: Editor & synthesis
     with tabs[1]:
+        st.markdown("### ✏️ Parameter Editor & Synthesis")
+        st.markdown("""
+        Adjust hand parameters using the sliders below and see the synthetic hand update in real-time.
+        Start with frozen parameters from captured poses or use default values.
+        """)
+        
+        # Show source of parameters
+        if "frozen_params" in st.session_state:
+            st.success("📌 Using frozen parameters from captured pose")
+        else:
+            st.info("ℹ️ Using default or latest captured parameters")
+        
+        st.markdown("---")
+        
         base_params = st.session_state.get("frozen_params", st.session_state["latest_params"] or default_params())
         edited = parameters_editor(base_params)
         st.session_state["edited_params"] = edited
 
+        st.markdown("---")
+        st.markdown("### 🎭 Synthetic Hand Preview")
+        st.markdown("The 3D hand below is reconstructed from the parameters you set above")
+        
         L_syn = synthesize_from_params(edited)
-        st.subheader("Synthetic instantiation from the parameters")
-        st.plotly_chart(plot_hand_3d(L_syn, setup, title="Synthesised hand"), use_container_width=True)
+        st.plotly_chart(plot_hand_3d(L_syn, setup, title="Synthesized Hand from Parameters"), use_container_width=True)
+        
+        # Option to reset parameters
+        col_reset1, col_reset2, col_reset3 = st.columns([1,2,1])
+        with col_reset2:
+            if st.button("🔄 Reset to Default Parameters", use_container_width=True):
+                if "frozen_params" in st.session_state:
+                    del st.session_state["frozen_params"]
+                st.rerun()
 
     # Tab 3: Projection
     with tabs[2]:
-        st.write("Projection of either the captured hand or the synthesised one onto the wall from the torch.")
-        mode = st.radio("Choose source", ["Captured (normalised)", "Synthesised from editor"])
-        if mode.startswith("Captured") and st.session_state["latest_landmarks"]:
+        st.markdown("### 🌑 Shadow Projection Simulator")
+        st.markdown("""
+        This tab simulates casting a shadow of the hand onto a virtual wall using a torch as the light source.
+        The projection geometry includes:
+        - 💡 **Torch**: Light source position
+        - 🟢 **Wall**: Circular projection surface
+        - 📏 **Projection rays**: Lines from torch through hand to wall
+        """)
+        
+        st.markdown("---")
+        
+        col_mode1, col_mode2 = st.columns([1,3])
+        with col_mode1:
+            st.markdown("**Select hand source:**")
+        with col_mode2:
+            mode = st.radio(
+                "Choose source",
+                ["📹 Captured (normalized)", "✏️ Synthesized from editor"],
+                label_visibility="collapsed"
+            )
+        
+        if mode.startswith("📹") and st.session_state["latest_landmarks"]:
             L = dict_to_np(st.session_state["latest_landmarks"])
+            st.success("Using captured hand from webcam")
         else:
             L = synthesize_from_params(st.session_state.get("edited_params", default_params()))
-        st.plotly_chart(plot_hand_3d(L, setup, title="3D with torch & cone"), use_container_width=True)
-        st.plotly_chart(plot_projection_2d(L, setup), use_container_width=True)
+            st.info("Using synthesized hand from parameter editor")
+        
+        st.markdown("---")
+        
+        col_3d, col_2d = st.columns([1,1])
+        
+        with col_3d:
+            st.markdown("#### 🎨 3D Scene with Projection Geometry")
+            st.plotly_chart(plot_hand_3d(L, setup, title="3D Hand with Torch & Projection Cone"), use_container_width=True)
+        
+        with col_2d:
+            st.markdown("#### 🌑 Shadow on Wall (2D)")
+            st.plotly_chart(plot_projection_2d(L, setup), use_container_width=True)
 
-    with st.expander("Notes & tips"):
+    with st.expander("📖 Technical Details & Advanced Information", expanded=False):
+        st.markdown("## 🔬 Technical Documentation")
+        
+        st.markdown("### 🎯 Geometric Invariances")
         st.markdown("""
-        - **Invariances applied:** (i) translation (palm-centered), (ii) scale (index–pinky MCP distance = 1),
-          (iii) rotation (palm plane aligned to +Z and in-plane rotation wrapped to ±90° by aligning index→pinky with +X).
-        - MediaPipe landmark coordinates from the webcam are normalised (x,y in [0,1], z relative). We map them to a canonical 3D frame before parametrising.
-        - The synthesis step is illustrative—not a full biomechanical solver—but lets you explore the parameter effects.
+        The app applies three key invariances to normalize hand poses for consistent comparison:
+        
+        1. **Translation Invariance** 🔄
+           - Centers the hand at the palm (metacarpophalangeal joint center)
+           - Removes dependency on hand position in space
+        
+        2. **Scale Invariance** 📏
+           - Normalizes to unit distance between index and pinky MCP joints
+           - Makes parameters independent of hand size
+        
+        3. **Rotation Invariance** 🔃
+           - Aligns palm plane normal to +Z axis
+           - Wraps in-plane rotation to ±90° range
+           - Aligns index→pinky direction with +X axis
+        """)
+        
+        st.markdown("---")
+        
+        st.markdown("### 📊 Hand Parametrization")
+        st.markdown("""
+        The parametric representation captures hand configuration with:
+        
+        **Global Parameters:**
+        - **φ_thumb**: Palm-thumb plane angle (controls thumb extension)
+        
+        **Inter-finger Angles:**
+        - Thumb to Index (T-I)
+        - Index to Middle (I-M)
+        - Middle to Ring (M-R)
+        - Ring to Pinky (R-P)
+        
+        **Joint Angles (per finger):**
+        - MCP: Metacarpophalangeal (base) joint
+        - PIP: Proximal interphalangeal (middle) joint
+        - DIP: Distal interphalangeal (tip) joint
+        
+        Total: **1 + 4 + (5×3) = 20 parameters** describe the hand pose
+        """)
+        
+        st.markdown("---")
+        
+        st.markdown("### 🤖 MediaPipe Integration")
+        st.markdown("""
+        MediaPipe provides 21 3D landmarks:
+        - 1 wrist point
+        - 4 thumb points
+        - 4×4 finger points (index, middle, ring, pinky)
+        
+        Coordinates are normalized:
+        - x, y ∈ [0, 1] (image space)
+        - z relative depth
+        
+        We map these to a canonical 3D frame before parametrization.
+        """)
+        
+        st.markdown("---")
+        
+        st.markdown("### 🎭 Synthesis Process")
+        st.warning("""
+        **Important Note:** The synthesis step is **illustrative** and educational, not a full biomechanical model.
+        It demonstrates how parameters affect hand configuration but doesn't enforce true anatomical constraints.
+        Use it to explore parameter effects and understand the representation.
+        """)
+        
+        st.markdown("---")
+        
+        st.markdown("### 💡 Tips for Best Results")
+        st.markdown("""
+        - 🌞 Use good lighting for camera capture
+        - 🤲 Keep entire hand visible in frame
+        - 📐 Hold hand steady for stable parameters
+        - 🎨 Try extreme parameter values to see effects
+        - 🔄 Freeze interesting poses to study them
+        - 🌑 View projections to understand 3D structure
         """)
 
 if __name__ == "__main__":
